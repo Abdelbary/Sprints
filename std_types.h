@@ -41,7 +41,7 @@ typedef volatile uint16_t* const reg_type16_t;
 #define HIGH 0xFF	// defines HIGH value for a bit
 
 #define  ZERO     0
-
+#define	 ONE	  1
 #define SET_BIT(number,bit)			((number)|=((1)<<(bit)))
 #define CLEAR_BIT(number,bit)		((number)&=(~((1)<<(bit))))
 #define TOGGLE(number,bit)			((number) ^ ((1)<<(bit)))

@@ -2,22 +2,31 @@
  * timers.c
  *
  * Created: 1/21/2020 4:44:04 AM
- *  Author: mahmo
+ *  Author: mahmo	
  */ 
 #include "timers.h"
 
 
 
 #define TIMER0_PRESCALER_CLEAR_MASK		0x07
+#define TIMER1_PRESCALER_CLEAR_MASK     0x0007
 #define TIMER2_PRESCALER_CLEAR_MASK     0x07
 #define F_CPU						    16
-#define MICRO_SEC_DELAY_TICKS			250
+#define TIMER0_2_MELI_SEC_DELAY_TICKS	250
 #define TIMER0_RESLUTION				256
-#define TCNT_DELAY_INIT_VALUE			(TIMER0_RESLUTION-MICRO_SEC_DELAY_TICKS)
+#define TCNT0_2_DELAY_INIT_VALUE		(TIMER0_RESLUTION-TIMER0_2_MELI_SEC_DELAY_TICKS)
+#define TIMER1_MICRO_SEC_DELAY_TICKS    (16000UL)
+#define TIMER1_RESLUTION				(65536UL)
+#define TIMER1_SWPWM_TICKS              (2500.0)
+#define FULL_DUTY_CYCLE					100.0
+#define TIMER1_SWPWM_INIT_VALUE			(TIMER1_RESLUTION-TIMER1_SWPWM_TICKS)
+#define TCNT1_DELAY_INIT_VALUE			(TIMER1_RESLUTION-TIMER1_MICRO_SEC_DELAY_TICKS)
+#define TCNT0_SW_PWM_INIT_VALUE			250
 
 static En_timer0perscaler_t	genu_timer0prescaler;
-//static En_timer1perscaler_t genu_timer1prescaler;
+static En_timer1perscaler_t genu_timer1prescaler;
 static En_timer2perscaler_t genu_timer2prescaler;
+
 
 typedef struct{
 	En_timer0Mode_t			genu_timer0Mode;
@@ -153,14 +162,14 @@ void timer0DelayMs(uint16_t u16_delay_in_ms)
 	*clear tov flag
 	*/
 	timer0Init(T0_NORMAL_MODE,T0_OC0_DIS,T0_PRESCALER_64,
-	TCNT_DELAY_INIT_VALUE,ZERO,T0_POLLING);
+	TCNT0_2_DELAY_INIT_VALUE,ZERO,T0_POLLING);
 	timer0Start();
 
 	while (u16_delay_in_ms)
 	{
 		/*pool for tov*/
 		while(BIT_IS_CLEARD(TIFR,TOV0_BIT));
-		TCNT0 = TCNT_DELAY_INIT_VALUE;
+		TCNT0 = TCNT0_2_DELAY_INIT_VALUE;
 		SET_BIT(TIFR,TOV0_BIT);
 		--u16_delay_in_ms;
 	}
@@ -184,9 +193,44 @@ void timer0DelayUs(uint32_t u32_delay_in_us)
  * Description:
  * @param dutyCycle
  */
-void timer0SwPWM(uint8_t u8_dutyCycle,uint8_t u8_frequency)
+void timer0SwPWM(uint8_t u8_dutyCycle,uint16_t u8_frequency)
 {
+	En_timer0perscaler_t  swPwmPrescaler;
+	/*choose appropriate prescaler
+	* if chosen freq is not supported
+	* freq of 1khz and prescaler of 64 will be chosen
+	*/
+	switch(u8_frequency)
+	{
+		case FREQ1:
+		swPwmPrescaler = T0_PRESCALER_1024;
+		break;
+		case FREQ2:
+		swPwmPrescaler = T0_PRESCALER_64;
+		break;
+		case FREQ3:
+		swPwmPrescaler = T0_PRESCALER_256;
+		break;
+		case FREQ4:
+		swPwmPrescaler = T0_PRESCALER_1024;
+		break;
+		default:
+		u8_frequency = 100;
+		swPwmPrescaler = T0_PRESCALER_1024;
+		break;
+	}
+	/*initiate timer with 
+	* normal mode & overflow interrupt enabled
+	*/
+	uint8_t tcntPwmValue = 100;
+	uint8_t onTime = tcntPwmValue +
+	 ((TIMER0_RESLUTION-tcntPwmValue)*
+	 ((100-u8_dutyCycle)/100.0));
 	
+	timer0Init(T0_NORMAL_MODE,T0_OC0_DIS
+	,swPwmPrescaler,tcntPwmValue,onTime
+	,T0_INTERRUPT_NORMAL|T0_INTERRUPT_CMP);
+	timer0Start();
 }
 
 
@@ -211,35 +255,137 @@ void timer0SwPWM(uint8_t u8_dutyCycle,uint8_t u8_frequency)
  * @param outputCompare
  * @param interruptMask
  */
-void timer1Init(En_timer1Mode_t en_mode,En_timer1OC_t en_OC,En_timer1perscaler_t en_prescal, uint16_t u16_initialValue, uint16_t u16_outputCompareA, uint16_t u16_outputCompareB,uint16_t u16_inputCapture, En_timer1Interrupt_t en_interruptMask);
+void timer1Init(En_timer1Mode_t en_mode,
+En_timer1OC_t en_OC,En_timer1perscaler_t en_prescal, 
+uint16_t u16_initialValue, 
+uint16_t u16_outputCompareA, 
+uint16_t u16_outputCompareB,
+uint16_t u16_inputCapture,
+ En_timer1Interrupt_t en_interruptMask)
+{
+	/*zero all registers
+	* TCCR1 = TCTN1 = OCR1A = OCR1B = ICR1 = ZERO
+	* TIMSK CLEAR BITS [TICIE1 OCIE1A OCIE1B TOIE1]
+	* TIFR  CLEAR BITS [ICF1 OCF1A OCF1B TOV1]
+	**/
+	TCCR1   =  ZERO;
+	TCNT1   =  ZERO;
+	OCR1A   =  ZERO;
+	OCR1B   =  ZERO;
+	ICR1	=  ZERO;
+	
+	CLEAR_BIT(TIMSK,TICIE1_BIT);
+	CLEAR_BIT(TIMSK,OCIE1A_BIT);
+	CLEAR_BIT(TIMSK,OCIE1B_BIT);
+	CLEAR_BIT(TIMSK,TOIE1_BIT);
 
+	SET_BIT(TIFR,ICF1_BIT);
+	SET_BIT(TIFR,OCF1A_BIT);
+	SET_BIT(TIFR,OCF1B_BIT);
+	SET_BIT(TIFR,TOV1_BIT);
+	
+	genu_timer1prescaler	=	en_prescal;
+	switch(en_mode)
+	{
+		case T1_NORMAL_MODE:
+		
+		SET_MASK(TCCR1,(en_mode|en_OC));
+		SET_MASK(TIMSK,en_interruptMask);
+		TCNT1		= u16_initialValue;
+		OCR1A       = u16_outputCompareA;
+		OCR1B		= u16_outputCompareB;
+		ICR1		= u16_inputCapture;
+		break;
+		
+		case T1_COMP_MODE_OCR1A_TOP:
+		
+		SET_MASK(TCCR1,(en_mode|en_OC));
+		SET_MASK(TIMSK,en_interruptMask);
+		TCNT1		= u16_initialValue;
+		OCR1A       = u16_outputCompareA;
+		OCR1B		= u16_outputCompareB;
+		ICR1		= u16_inputCapture;
+		break;
+		
+		case T1_COMP_MODE_ICR1_TOP:
+		
+		SET_MASK(TCCR1,(en_mode|en_OC));
+		SET_MASK(TIMSK,en_interruptMask);
+		TCNT1		= u16_initialValue;
+		OCR1A       = u16_outputCompareA;
+		OCR1B		= u16_outputCompareB;
+		ICR1		= u16_inputCapture;
+		break;
+	}
+}
 /**
  * Description:
  * @param value
  */
-void timer1Set(uint16_t u16_value);
+void timer1Set(uint16_t u16_value)
+{
+	TCNT1 = u16_value;
+}
 
 /**
  * Description:
  * @return
  */
-uint16_t timer1Read(void);
+uint16_t timer1Read(void)
+{
+	return TCNT1;
+}
 
 /**
  * Description:
  */
-void timer1Start(void);
+void timer1Start(void)
+{
+	CLEAR_MASK(TCCR1,TIMER1_PRESCALER_CLEAR_MASK);
+	SET_MASK(TCCR1,genu_timer1prescaler);
+}
 
 /**
  * Description:
  */
-void timer1Stop(void);
+void timer1Stop(void)
+{
+	CLEAR_MASK(TCCR1,TIMER1_PRESCALER_CLEAR_MASK);
+}
 
 /**
  * Description:
  * @param delay
  */
-void timer1DelayMs(uint16_t u16_delay_in_ms);
+void timer1DelayMs(uint16_t u16_delay_in_ms)
+{
+/************************************************************************/
+	/*					NOTE: Normal Mode In use.							*/
+	/************************************************************************/
+
+	/*initialize timer
+	*loop on microsec
+	*load 250 to tcnt
+	*pool for tov
+	*--microsec
+	*load tcnt with 250
+	*clear tov flag
+	*/
+	timer1Init(T1_NORMAL_MODE,T1_OC1_DIS,
+	T1_PRESCALER_NO,
+	TCNT1_DELAY_INIT_VALUE,ZERO,ZERO,ZERO,T1_POLLING);
+	timer1Start();
+	while (u16_delay_in_ms)
+	{
+		/*pool for tov2*/
+		while(BIT_IS_CLEARD(TIFR,TOV1_BIT));
+
+		TCNT1 = TCNT1_DELAY_INIT_VALUE;
+		SET_BIT(TIFR,TOV1_BIT);
+		--u16_delay_in_ms;
+	}
+	timer1Stop();	
+}
 
 /*
  * user defined
@@ -250,7 +396,26 @@ void timer1DelayUs(uint32_t u32_delay_in_us);
  * Description:
  * @param dutyCycle
  */
-void timer1SwPWM(uint8_t u8_dutyCycle,uint8_t u8_frequency);
+void timer1SwPWM(uint8_t u8_dutyCycle1,uint8_t u8_dutyCycle2,uint8_t u8_frequency)
+{
+	/* normal mode 
+	*  fixed freq 100
+	*  fixed prescaler 64
+	*  ticks 2500
+	*  TCNT1 63036
+	*/
+	/*we add one to the CMP VALUE to avoid TCNT1 = OCR1*/
+	uint32_t compareMatch1Value = TIMER1_SWPWM_INIT_VALUE+ONE+(((FULL_DUTY_CYCLE-u8_dutyCycle1)/100.0)* TIMER1_SWPWM_TICKS);
+	uint32_t compareMatch2Value = TIMER1_SWPWM_INIT_VALUE+ONE+(((FULL_DUTY_CYCLE-u8_dutyCycle2)/100.0)* TIMER1_SWPWM_TICKS);
+	
+	timer1Init(T1_NORMAL_MODE,T1_OC1_DIS,
+	T1_PRESCALER_64,
+	TIMER1_SWPWM_INIT_VALUE,compareMatch1Value,
+	compareMatch2Value,ZERO,
+	T1_INTERRUPT_NORMAL|T1_INTERRUPT_CMP_1A|T1_INTERRUPT_CMP_1B);
+	
+	timer1Start();
+}
 
 
 
@@ -373,7 +538,7 @@ void timer2DelayMs(uint16_t u16_delay_in_ms)
 	*/
 
 	timer2Init(T2_NORMAL_MODE,T2_OC2_DIS,T2_PRESCALER_64,
-	TCNT_DELAY_INIT_VALUE,ZERO,T2_INERNAL_CLK,T2_POLLING);
+	TCNT0_2_DELAY_INIT_VALUE,ZERO,T2_INERNAL_CLK,T2_POLLING);
 	
 	timer2Start();
 	while (u16_delay_in_ms)
@@ -381,7 +546,7 @@ void timer2DelayMs(uint16_t u16_delay_in_ms)
 		/*pool for tov2*/
 		while(BIT_IS_CLEARD(TIFR,TOV2_BIT));
 
-		TCNT2 = TCNT_DELAY_INIT_VALUE;
+		TCNT2 = TCNT0_2_DELAY_INIT_VALUE;
 		SET_BIT(TIFR,TOV2_BIT);
 		--u16_delay_in_ms;
 	}

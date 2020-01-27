@@ -69,7 +69,9 @@ typedef enum En_timer0Interrupt_t{
 }En_timer0Interrupt_t;
 
 
-
+typedef enum En_timer0SwOWNFreq_t{
+	FREQ1=100,FREQ2=1000,FREQ3=4000,FREQ4=16000
+}En_timer0SwOWNFreq_t;
 
 
 // for timer 1
@@ -86,7 +88,7 @@ typedef enum En_timer1perscaler_t{
 }En_timer1perscaler_t;
 
 typedef enum En_timer1Interrupt_t{
-	T1_POLLING=0,T1_INTERRUPT_NORMAL=0x04,T0_INTERRUPT_CMP_1B=0x08, T1_INTERRUPT_CMP_1A=0x10, T1_INTERRUPT_ICAPTURE = 0x20
+	T1_POLLING=0,T1_INTERRUPT_NORMAL=0x04,T1_INTERRUPT_CMP_1B=0x08, T1_INTERRUPT_CMP_1A=0x10, T1_INTERRUPT_ICAPTURE = 0x20
 }En_timer1Interrupt_t;
 
 
@@ -165,7 +167,7 @@ void timer0DelayUs(uint32_t u32_delay_in_us);
  * Description:
  * @param dutyCycle
  */
-void timer0SwPWM(uint8_t u8_dutyCycle,uint8_t u8_frequency);
+void timer0SwPWM(uint8_t u8_dutyCycle,uint16_t u8_frequency);
 
 
 
@@ -223,7 +225,7 @@ void timer1DelayUs(uint32_t u32_delay_in_us);
  * Description:
  * @param dutyCycle
  */
-void timer1SwPWM(uint8_t u8_dutyCycle,uint8_t u8_frequency);
+void timer1SwPWM(uint8_t u8_dutyCycle1,uint8_t u8_dutyCycle2,uint8_t u8_frequency);
 
 
 

@@ -11,11 +11,30 @@
 #include "sevenSeg.h"
 #include "led.h"
 #include "timers.h"
+#include "interrupt.h"
+#include "dcMotor.h"
+
 #define  MAXCOUNT 100
 #define  TEN	  10
 #define  TUNEDTIMEDECRMENTER    60
 #define  FIFTY    50
 
+ISR(TIMER1_COMPA_vect)
+{
+	gpioPinWrite(MOTOR_EN_1_GPIO,MOTOR_EN_1_BIT,HIGH);
+}
+ISR(TIMER1_COMPB_vect)
+{
+	gpioPinWrite(MOTOR_EN_2_GPIO,MOTOR_EN_2_BIT,HIGH);
+}
+
+ISR(TIMER1_OVF_vect)
+{
+	TCNT1 = 63036;
+	gpioPinWrite(MOTOR_EN_1_GPIO,MOTOR_EN_1_BIT,LOW);
+	gpioPinWrite(MOTOR_EN_2_GPIO,MOTOR_EN_2_BIT,LOW);
+
+}
 /**
  * Description: function to count from 0 to 99 on two
  * seven seg using software delay.
@@ -155,19 +174,47 @@ void led_button(void){
 int main(void)
 {
 	
+	sei();
+	//Led_Init(LED_0);
+	//Led_Init(LED_1);
+	//Led_On(LED_0);
+	MotorDC_Init(MOT_1);
+	MotorDC_Init(MOT_2);
 	
-	Led_Init(LED_0);
-	Led_On(LED_0);
+
+    
+		sint8_t i ;
+		MotorDC_Dir(MOT_1,FORWARD);
+		MotorDC_Dir(MOT_2,FORWARD);
+		for( i = 20 ; i <= 100 ; i+=20)	
+		{
+			MotorDC_Speed_PollingWithT0(i);
+			timer2DelayMs(1000);
+		}
+		for( i = 80 ; i >= 0  ; i-=20)
+		{
+			MotorDC_Speed_PollingWithT0(i);
+			timer2DelayMs(1000);
+		}
+		MotorDC_Dir(MOT_1,FORWARD);
+		MotorDC_Dir(MOT_2,BACKWARD);
+		MotorDC_Speed_PollingWithT0(20);
+		timer2DelayMs(2000);
+		MotorDC_Speed_PollingWithT0(1);
+		timer1Stop();
 	
-    while (1) 
-    {
 		/*uncomment a function to choose application 
 		*/
 		//trafficLight();
 		//led_button();
 		//counter_up();
+		/*
 		Led_Off(LED_0);
+		timer1DelayMs(10);
+		Led_On(LED_0);
+		timer1DelayMs(10);
+*/
 		
-    }	
+    	
 }
 
