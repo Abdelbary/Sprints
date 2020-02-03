@@ -16,6 +16,7 @@
 #define MCUCSR			*(reg_type8_t)(0X54)
 #define GICR			*(reg_type8_t)(0X5B)
 #define GIFR			*(reg_type8_t)(0X5A)
+#define SREG			*(reg_type8_t)(0X5F)
 
 /*
  * PORTx registers

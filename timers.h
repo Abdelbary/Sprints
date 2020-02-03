@@ -8,6 +8,9 @@
 #ifndef TIMERS_H_
 #define TIMERS_H_
 
+#include "registers.h"
+#include "gpio.h"
+
 /* TIMSK_BITS */
 #define OCIE2_BIT   7
 #define TOIE2_BIT   6
@@ -34,9 +37,9 @@
 #define TCN2UB_BIT  2
 #define OCR2UB_BIT  1
 #define TCR2UB_BIT  0
+#define TIMER0_RESLUTION				256UL
 
-#include "registers.h"
-#include "gpio.h"
+
 
 /*
  * User Configuration Macros

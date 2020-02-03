@@ -46,8 +46,8 @@ typedef volatile uint16_t* const reg_type16_t;
 #define CLEAR_BIT(number,bit)		((number)&=(~((1)<<(bit))))
 #define TOGGLE(number,bit)			((number) ^ ((1)<<(bit)))
 #define SET_MASK(number,Mask)       ((number)|=(Mask))
-#define CLEAR_MASK(number,Mask)     ((number)&=(~(1<<Mask)))
-#define TOGGLE_MASK(number,Mask)    ((number) ^ (1<<Mask))
+#define CLEAR_MASK(number,Mask)     ((number)&=(~(Mask)))
+#define TOGGLE_MASK(number,Mask)    ((number) ^ (Mask))
 #define BIT_IS_SET(number,bit)  ((number)&(1<<(bit)))
 #define BIT_IS_CLEARD(number,bit)   (!((number)&(1<<(bit))))
 

@@ -135,12 +135,7 @@ void timer0Stop(void)
 {
 	/*clear prescaler*/
 	CLEAR_MASK(TCCR0,TIMER0_PRESCALER_CLEAR_MASK);
-	/*zero all bits & registers
-	TCCR0   =  ZERO;
-	TCNT0   =  ZERO;
-	TIMSK  &= ~(TOV0|OCF0);
-	TIFR   |= TOV0;
-	*/
+
 }
 /**
  * Description:

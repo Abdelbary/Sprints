@@ -13,12 +13,44 @@
 #include "timers.h"
 #include "interrupt.h"
 #include "dcMotor.h"
-
+#include "SwICU.h"
+#include "registers.h"
 #define  MAXCOUNT 100
 #define  TEN	  10
 #define  TUNEDTIMEDECRMENTER    60
 #define  FIFTY    50
 
+
+extern volatile uint16_t gu16SwICU_timer0_Overflow_Counts;
+extern volatile uint8_t  gu8SwICU_INT2_vec_enteranceFlag;
+extern volatile uint8_t  gu8SwICU_Timer0_Stop_Flag ;
+
+ISR(INT2_vect)
+{
+	//Led_Toggle(LED_0);
+	/*	check for value of overflows
+	*	EVEN VALUE start timer 0
+	*	ODD value stop timer 0
+	*/
+	if(gu8SwICU_INT2_vec_enteranceFlag&1)
+	{
+		SwICU_Stop();
+		gu8SwICU_INT2_vec_enteranceFlag = FALSE;
+		gu8SwICU_Timer0_Stop_Flag = TRUE;
+		SwICU_SetCfgEdge(SwICU_EdgeRisiging);
+	}
+	else
+	{
+		SwICU_Start();
+		gu8SwICU_INT2_vec_enteranceFlag = TRUE;
+		SwICU_SetCfgEdge(SwICU_EdgeFalling);
+	}
+}
+
+ISR(TIMER0_OVF_vect)
+{
+	++gu16SwICU_timer0_Overflow_Counts;
+}
 ISR(TIMER1_COMPA_vect)
 {
 	gpioPinWrite(MOTOR_EN_1_GPIO,MOTOR_EN_1_BIT,HIGH);
@@ -170,51 +202,73 @@ void led_button(void){
 	}
 }
 
-
-int main(void)
+void carTaskOne()
 {
-	
-	sei();
-	//Led_Init(LED_0);
-	//Led_Init(LED_1);
-	//Led_On(LED_0);
 	MotorDC_Init(MOT_1);
 	MotorDC_Init(MOT_2);
 	
 
-    
-		sint8_t i ;
-		MotorDC_Dir(MOT_1,FORWARD);
-		MotorDC_Dir(MOT_2,FORWARD);
-		for( i = 20 ; i <= 100 ; i+=20)	
-		{
-			MotorDC_Speed_PollingWithT0(i);
-			timer2DelayMs(1000);
-		}
-		for( i = 80 ; i >= 0  ; i-=20)
-		{
-			MotorDC_Speed_PollingWithT0(i);
-			timer2DelayMs(1000);
-		}
-		MotorDC_Dir(MOT_1,FORWARD);
-		MotorDC_Dir(MOT_2,BACKWARD);
-		MotorDC_Speed_PollingWithT0(20);
-		timer2DelayMs(2000);
-		MotorDC_Speed_PollingWithT0(1);
-		timer1Stop();
 	
-		/*uncomment a function to choose application 
-		*/
-		//trafficLight();
-		//led_button();
-		//counter_up();
-		/*
-		Led_Off(LED_0);
-		timer1DelayMs(10);
-		Led_On(LED_0);
-		timer1DelayMs(10);
-*/
-		
-    	
+	sint8_t i ;
+	MotorDC_Dir(MOT_1,FORWARD);
+	MotorDC_Dir(MOT_2,FORWARD);
+	for( i = 20 ; i <= 100 ; i+=20)
+	{
+		MotorDC_Speed_PollingWithT0(i);
+		timer2DelayMs(500);
+	}
+	for( i = 80 ; i >= 0  ; i-=20)
+	{
+		MotorDC_Speed_PollingWithT0(i+1);
+		timer2DelayMs(500);
+	}
+	MotorDC_Dir(MOT_1,FORWARD);
+	MotorDC_Dir(MOT_2,BACKWARD);
+	MotorDC_Speed_PollingWithT0(40);
+	timer2DelayMs(395);
+	MotorDC_Speed_PollingWithT0(1);
+	timer1Stop();	
+}
+int main(void)
+{
+	timer2DelayMs(1000);
+	sei();
+    Led_Init(LED_0);
+	Led_Init(LED_1);
+	Led_Init(LED_2);
+	Led_Init(LED_3);
+	//Led_Init(LED_1);
+	//Led_On(LED_0);
+	
+	/*uncomment a function to choose application 
+	*/
+	/*trafficLight();
+	led_button();
+	counter_up();
+	car()
+	*/
+	//SwICU_Init(SwICU_EdgeRisiging);
+	gpioPinDirection(GPIOD,BIT0,OUTPUT);
+	PORTB_DATA = (PORTB_DATA&0x0F);
+	uint64_t dis;
+
+	while(1)
+	{
+		SwICU_Init(SwICU_EdgeRisiging);
+		gpioPinWrite(GPIOD,BIT0,HIGH);
+		timer2DelayMs(1);
+		gpioPinWrite(GPIOD,BIT0,LOW);
+		SwICU_Read(&dis);
+		dis = ((dis*8)/58.0);
+		//dis = (dis*15)/200.0;
+		TCNT1L = dis;
+		PORTB_DATA = (PORTB_DATA&0x0F) | (dis<<4);
+			
+
+		//gpioPortWrite(PORTB)
+		//timer2DelayMs(1000);
+		//dis = ((dis*4)/58.0);
+	}
+	
 }
 
