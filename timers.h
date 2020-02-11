@@ -37,7 +37,6 @@
 #define TCN2UB_BIT  2
 #define OCR2UB_BIT  1
 #define TCR2UB_BIT  0
-#define TIMER0_RESLUTION				256UL
 
 
 

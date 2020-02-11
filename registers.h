@@ -89,6 +89,11 @@
 #define ASSR			*(reg_type8_t)(0X42)
 
 
+/* SPI */
+#define SPCR    *(reg_type8_t)(0x0D)
+#define SPSR    *(reg_type8_t)(0x0E)
+#define SPDR    *(reg_type8_t)(0x0F)
+
 
 
 

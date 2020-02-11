@@ -6,269 +6,59 @@
  */ 
 
 #include "gpio.h"
-#include "softwareDelay.h"
 #include "pushButton.h"
-#include "sevenSeg.h"
 #include "led.h"
 #include "timers.h"
 #include "interrupt.h"
-#include "dcMotor.h"
-#include "SwICU.h"
 #include "registers.h"
-#define  MAXCOUNT 100
-#define  TEN	  10
-#define  TUNEDTIMEDECRMENTER    60
-#define  FIFTY    50
+#include "spi.h"
+#include "util/delay.h"
+#include "sevenSeg.h"
 
 
-extern volatile uint16_t gu16SwICU_timer0_Overflow_Counts;
-extern volatile uint8_t  gu8SwICU_INT2_vec_enteranceFlag;
-extern volatile uint8_t  gu8SwICU_Timer0_Stop_Flag ;
+gstrSPI_spi_satus_t sp_status;
 
-ISR(INT2_vect)
-{
-	//Led_Toggle(LED_0);
-	/*	check for value of overflows
-	*	EVEN VALUE start timer 0
-	*	ODD value stop timer 0
-	*/
-	if(gu8SwICU_INT2_vec_enteranceFlag&1)
-	{
-		SwICU_Stop();
-		gu8SwICU_INT2_vec_enteranceFlag = FALSE;
-		gu8SwICU_Timer0_Stop_Flag = TRUE;
-		SwICU_SetCfgEdge(SwICU_EdgeRisiging);
+void slave(){
+	sp_status.spi_mod			 = SPI_SLAVE_MOD;
+	sp_status.spi_opration_mod	 = SPI_NORMAL_MOD;
+	sp_status.spi_prescaler		 = SPI_PRESCALER_4;
+	sp_status.spi_speed_mod		 = SPI_NORMAL_MOD;
+	sp_status.spi_sampling_mod	 = SPI_SAMPLING_MOD_0;
+	sp_status.spi_data_order	 = SPI_DATA_ORDER_LSB;
+	SPI_init(&sp_status);
+	spi_enable();
+	sevenSegInit(SEG_0);
+	sevenSegEnable(SEG_0);
+	//PORTA_DIR = 0xff;
+	uint8_t r;
+	while(1){
+		r = SPI_recieveByte();
+		//PORTA_DATA = r;
+		sevenSegWrite(SEG_0,r);
 	}
-	else
-	{
-		SwICU_Start();
-		gu8SwICU_INT2_vec_enteranceFlag = TRUE;
-		SwICU_SetCfgEdge(SwICU_EdgeFalling);
-	}
-}
-
-ISR(TIMER0_OVF_vect)
-{
-	++gu16SwICU_timer0_Overflow_Counts;
-}
-ISR(TIMER1_COMPA_vect)
-{
-	gpioPinWrite(MOTOR_EN_1_GPIO,MOTOR_EN_1_BIT,HIGH);
-}
-ISR(TIMER1_COMPB_vect)
-{
-	gpioPinWrite(MOTOR_EN_2_GPIO,MOTOR_EN_2_BIT,HIGH);
-}
-
-ISR(TIMER1_OVF_vect)
-{
-	TCNT1 = 63036;
-	gpioPinWrite(MOTOR_EN_1_GPIO,MOTOR_EN_1_BIT,LOW);
-	gpioPinWrite(MOTOR_EN_2_GPIO,MOTOR_EN_2_BIT,LOW);
 
 }
-/**
- * Description: function to count from 0 to 99 on two
- * seven seg using software delay.
- * @param  void
- * return  void
- */
 
-/*
-*Description : Enum used for 9th requirment as traffic  
-*light states
-*/
-enum EN_trafficLightState{
-	go,
-	stop,
-	ready
-}trafficLightState = stop;
-
-
-/* an Function that makes a 00-99 count up 
-* counter using the two seven-segment 
-* displays with a 1-second delay from count to count.
-* @param : void
-* return : void
-*/
-void counter_up(void){
-	uint8_t counter = 0;
-	uint8_t MeliSec = 0;
-	
-	while(counter < MAXCOUNT)
-	{
-		/*
-	     *disable SEG1 enable SEG0
-		 *send first bit
-		 */
-		sevenSegInit(SEG_0);
-		sevenSegEnable(SEG_0);
-		sevenSegDisable(SEG_1);
-		sevenSegWrite(SEG_0,counter/TEN);
-		/*
-	     *disable SEG0 enable SEG1
-		 *send second bit
-		 */
-		sevenSegInit(SEG_1);
-		sevenSegEnable(SEG_1);
-		sevenSegDisable(SEG_0);
-		sevenSegWrite(SEG_1,counter%TEN);
-		/*software delay 1ms */
-		softwareDelayMs(MSEC);
-		MeliSec++;
-		if(MeliSec == SEC){
-		counter++;
-		MeliSec = 0;
-		}
-	}
-}
-
-/*Description: a Function that implements a state machine
-*of a traffic light with states: -stop
-*								 -ready
-*								 -go
-*@param : void
-*return : void
-*/
-void trafficLight()
-{
-	/*initialize led pins
-	*turnoff all lights
-	*get next state
-	*turn on state led
-	*delay
-	*repeat
-	*/	
-	Led_Init(LED_1);
-	Led_Init(LED_2);
-	Led_Init(LED_3);
-	Led_Off(LED_1);
-	Led_Off(LED_2);
-	Led_Off(LED_3);
-	
-	switch(trafficLightState)
-	{
-		case go:
-		trafficLightState = stop;
-		Led_On(LED_1);
-		break;
-		case stop:
-		trafficLightState = ready;
-		Led_On(LED_2);
-		break;
-		case ready:
-		trafficLightState = go;
-		Led_On(LED_3);
-		break;
-	}
-	softwareDelayMs(SEC);
-}
-
-/*
-* Description: a Function that turn on a led 1 sec 
-* for every button push on the condition that the time
-* between two pushes is less than 1 sec
-* after the time elapse the led turns off
-* @param : void
-* return : void
-*/
-void led_button(void){
-	En_buttonStatus_t buttonStatus = Released;
-	uint8_t ledOnTime = 0 ;
-	/* initialize and pull up on button
-	*  initialize led 
-	*/
-	pushButtonInit(BTN_0);
-	gpioPinWrite(BTN_0_GPIO,BTN_0_BIT,HIGH);
-	Led_Init(LED_0);
-	
-	/*get button state*/
-	buttonStatus = pushButtonGetStatus(BTN_0);
-	
-	/*for each button press increase led_on time by 1 sec*/
-	if(buttonStatus == Pressed)
-	{
-		ledOnTime+=SEC;
-		Led_On(LED_0);
-		
-		while(ledOnTime > 0){
-			softwareDelayMs(FIFTY);
-			buttonStatus = pushButtonGetStatus(BTN_0);
-			ledOnTime-=TUNEDTIMEDECRMENTER;
-			if(buttonStatus == Pressed)
-			ledOnTime+= SEC;
-		}	
-		Led_Off(LED_0);
-	}
-}
-
-void carTaskOne()
-{
-	MotorDC_Init(MOT_1);
-	MotorDC_Init(MOT_2);
-	
-
-	
-	sint8_t i ;
-	MotorDC_Dir(MOT_1,FORWARD);
-	MotorDC_Dir(MOT_2,FORWARD);
-	for( i = 20 ; i <= 100 ; i+=20)
-	{
-		MotorDC_Speed_PollingWithT0(i);
-		timer2DelayMs(500);
-	}
-	for( i = 80 ; i >= 0  ; i-=20)
-	{
-		MotorDC_Speed_PollingWithT0(i+1);
-		timer2DelayMs(500);
-	}
-	MotorDC_Dir(MOT_1,FORWARD);
-	MotorDC_Dir(MOT_2,BACKWARD);
-	MotorDC_Speed_PollingWithT0(40);
-	timer2DelayMs(395);
-	MotorDC_Speed_PollingWithT0(1);
-	timer1Stop();	
-}
-int main(void)
-{
-	timer2DelayMs(1000);
-	sei();
-    Led_Init(LED_0);
-	Led_Init(LED_1);
-	Led_Init(LED_2);
-	Led_Init(LED_3);
-	//Led_Init(LED_1);
-	//Led_On(LED_0);
-	
-	/*uncomment a function to choose application 
-	*/
-	/*trafficLight();
-	led_button();
-	counter_up();
-	car()
-	*/
-	//SwICU_Init(SwICU_EdgeRisiging);
-	gpioPinDirection(GPIOD,BIT0,OUTPUT);
-	PORTB_DATA = (PORTB_DATA&0x0F);
-	uint64_t dis;
-
-	while(1)
-	{
-		SwICU_Init(SwICU_EdgeRisiging);
-		gpioPinWrite(GPIOD,BIT0,HIGH);
-		timer2DelayMs(1);
-		gpioPinWrite(GPIOD,BIT0,LOW);
-		SwICU_Read(&dis);
-		dis = ((dis*8)/58.0);
-		//dis = (dis*15)/200.0;
-		TCNT1L = dis;
-		PORTB_DATA = (PORTB_DATA&0x0F) | (dis<<4);
-			
-
-		//gpioPortWrite(PORTB)
-		//timer2DelayMs(1000);
-		//dis = ((dis*4)/58.0);
+void master(){
+	sp_status.spi_mod			 = SPI_MASTER_MOD;
+	sp_status.spi_opration_mod	 = SPI_NORMAL_MOD;
+	sp_status.spi_prescaler		 = SPI_PRESCALER_4;
+	sp_status.spi_speed_mod		 = SPI_NORMAL_MOD;
+	sp_status.spi_sampling_mod	 = SPI_SAMPLING_MOD_0;
+	sp_status.spi_data_order	 = SPI_DATA_ORDER_LSB;
+	SPI_init(&sp_status);
+	spi_enable();
+	uint8_t i = 0;
+	while(1){
+		i%=10;
+		SPI_sendByte(i);
+		i++;
+		timer0DelayMs(1000);
 	}
 	
 }
-
+int main(){
+	
+	//master();
+	//slave();
+}
